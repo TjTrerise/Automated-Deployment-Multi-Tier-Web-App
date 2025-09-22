@@ -1,0 +1,67 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Iam Roles for the multi-tier web instance.
+
+Parameters:
+
+  DBSecretId:
+    Type: String
+    Description: The identifier for the database secret
+  
+  StackName:
+    Type: String
+    Description: Name of the  stack
+ 
+Resources: 
+
+  IamInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${StackName}-Iam-Role"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+       - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+       - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: 
+      - IamInstanceRole
+    Properties:
+      Roles:
+        - !Ref IamInstanceRole
+      Path: /
+      InstanceProfileName: !Sub "${StackName}-InstanceProfile"
+
+  EC2SecretsManagerPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn:
+      - IamInstanceRole
+    Properties:
+      PolicyName: !Sub "${StackName}-SecretsManager-Policy"
+      Roles:
+        - !Ref IamInstanceRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !Ref DBSecretId
+
+Outputs:
+
+  EC2InstanceProfileId:
+    Description: The Instance profile for the instances
+    Value: !Ref EC2InstanceProfile
+ 
+

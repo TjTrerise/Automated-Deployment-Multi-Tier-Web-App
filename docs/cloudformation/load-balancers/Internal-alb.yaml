@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Internal Application Load Balancer for App Tier
+
+Parameters:
+  PrivateSubnet1Id:
+    Type: String
+    Description: The ID for the first private subnet
+
+  PrivateSubnet2Id:
+    Type: String
+    Description: The ID for the second private subnet
+
+  Ec2InternalAlbSgId:
+    Type: String
+    Description: The ID for the internal ALB security group
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+
+Resources:
+  InternalApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${StackName}-Internal-alb"
+      Type: application
+      Scheme: internal
+      Subnets:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      SecurityGroups:
+        - !Ref Ec2InternalAlbSgId
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-internal-alb"
+
+Outputs:
+
+  InternalAlbDNS:
+    Value: !GetAtt InternalApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub "${StackName}-AlbDNS"
+
+  InternalAlbId:
+    Value: !Ref InternalApplicationLoadBalancer
+    Export:
+      Name: !Sub "${StackName}-AlbId"

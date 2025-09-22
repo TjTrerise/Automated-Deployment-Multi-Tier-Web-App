@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multi-Tier Web App RDS Stack
+
+Parameters:
+
+  VpcId:
+    Type: String
+    Description: The identifier for the VPC
+  
+  PrivateSubnet1Id:
+    Type: String
+    Description: Private subnet 1 DBSecretId
+  
+  PrivateSubnet2Id:
+    Type: String
+    Description: Private subnet 2 identifier
+
+  RdsSgId:
+    Type: String
+    Description: The identifier for the RDS security group
+  
+  DBSecretId:
+    Type: String
+    Description: The secret for the databse
+  
+  DBNameId:
+    Type: String
+    Description: The name of the database
+
+  DBEngineId:
+    Type: String
+    Description: The database engine.
+
+  DBPortId:
+    Type: String
+    Description: The database port
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+
+  SubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub "${StackName}-dbsubnetgroup"
+      DBSubnetGroupDescription: Database subnet group for RDS
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-dbsubgroup"
+
+  AppDb1:
+    Type: AWS::RDS::DBInstance
+    DependsOn: SubnetGroup
+    Properties:
+      DBInstanceIdentifier: !Sub "${StackName}-DB"
+      DBInstanceClass: db.m5.large
+      AllocatedStorage: "400"
+      StorageType: gp2
+      MultiAZ: true
+      StorageEncrypted: true
+      Engine: !Sub '{{resolve:ssm:${DBEngineId}}}'        
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DBSecretId}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DBSecretId}:SecretString:password}}'
+      DBName: !Sub '{{resolve:ssm:${DBNameId}}}'
+      Port: !Sub '{{resolve:ssm:${DBPortId}}}'
+      DBSubnetGroupName: !Ref SubnetGroup
+      VPCSecurityGroups:
+        - !Ref RdsSgId
+      PubliclyAccessible: false
+      DeletionProtection: false
+      NetworkType: "IPV4"
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-DB"
+
+
+Outputs:
+  
+  DatabaseId:
+    Description: The ID for the database
+    Value: !Ref AppDb1
+    Export:
+      Name: !Sub "${StackName}-DbId"
+  
+  DatabaseEndpointId:
+    Description: The endpoint for the database instance
+    Value: !GetAtt AppDb1.Endpoint.Address
+    Export:
+      Name: !Sub "${StackName}-DbEndpointId"

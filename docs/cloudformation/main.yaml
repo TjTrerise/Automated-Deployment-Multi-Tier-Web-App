@@ -1,0 +1,197 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multi-Tier Public Private  stack with CIDR mPrivateings
+
+Mappings:
+  RegionToCidr:
+    eu-west-2:
+      VpcCidr: 10.16.0.0/16
+      PublicSubnet1: 10.16.0.0/20
+      PublicSubnet2: 10.16.16.0/20
+      PublicSubnet3: 10.16.32.0/20
+      PrivateSubnet1: 10.16.48.0/20
+      PrivateSubnet2: 10.16.64.0/20
+      PrivateSubnet3: 10.16.80.0/20
+      
+    us-east-1:
+      VpcCidr: 10.32.0.0/16
+      PublicSubnet1: 10.32.0.0/20
+      PublicSubnet2: 10.32.16.0/20
+      PublicSubnet3: 10.32.32.0/20
+      PrivateSubnet1: 10.32.48.0/20
+      PrivateSubnet2: 10.32.64.0/20
+      PrivateSubnet3: 10.32.80.0/20
+
+Resources:
+
+  SecretsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/parameters-and-secrets.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+
+  IamStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - SecretsStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/iam.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        DBSecretId: !GetAtt SecretsStack.Outputs.DBSecretId
+    
+  VpcStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/vpc.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        VpcCidr: !FindInMap [RegionToCidr, !Ref "AWS::Region", VpcCidr]
+        PublicSubnet1: !FindInMap [RegionToCidr, !Ref "AWS::Region", PublicSubnet1]
+        PublicSubnet2: !FindInMap [RegionToCidr, !Ref "AWS::Region", PublicSubnet2]
+        PrivateSubnet1: !FindInMap [RegionToCidr, !Ref "AWS::Region", PrivateSubnet1]
+        PrivateSubnet2: !FindInMap [RegionToCidr, !Ref "AWS::Region", PrivateSubnet2]
+
+  SecurityGroupsStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: VpcStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/security-groups.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+
+  RDSStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - SecurityGroupsStack
+      - SecretsStack
+      - VpcStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/rds.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        PrivateSubnet1Id: !GetAtt VpcStack.Outputs.PrivateSubnet1Id
+        PrivateSubnet2Id: !GetAtt VpcStack.Outputs.PrivateSubnet2Id
+        RdsSgId: !GetAtt SecurityGroupsStack.Outputs.RdsSgId 
+        DBSecretId: !GetAtt SecretsStack.Outputs.DBSecretId
+        DBNameId: !GetAtt SecretsStack.Outputs.DBNameId
+        DBEngineId: !GetAtt SecretsStack.Outputs.DBEngineId
+        DBPortId: !GetAtt SecretsStack.Outputs.DBPortId
+        
+  AppLTStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - SecretsStack
+      - SecurityGroupsStack
+      - IamStack
+      - RDSStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/launch-templates/app-tier-launch-template.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        Ec2AppSgId: !GetAtt SecurityGroupsStack.Outputs.Ec2AppSgId 
+        DBSecretId: !GetAtt SecretsStack.Outputs.DBSecretId 
+        EC2InstanceProfileId: !GetAtt IamStack.Outputs.EC2InstanceProfileId  
+        DatabaseEndpointId: !GetAtt RDSStack.Outputs.DatabaseEndpointId     
+
+  InternalAlbStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - VpcStack
+      - SecurityGroupsStack
+    Properties:
+        TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/load-balancers/Internal-alb.yaml
+        Parameters:
+          StackName: !Ref "AWS::StackName"
+          PrivateSubnet1Id: !GetAtt VpcStack.Outputs.PrivateSubnet1Id
+          PrivateSubnet2Id: !GetAtt VpcStack.Outputs.PrivateSubnet2Id
+          Ec2InternalAlbSgId: !GetAtt SecurityGroupsStack.Outputs.Ec2InternalAlbSgId
+
+  WebLTStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - SecurityGroupsStack
+      - IamStack
+      - InternalAlbStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/launch-templates/web-tier-launch-template.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        Ec2WebSgId: !GetAtt SecurityGroupsStack.Outputs.Ec2WebSgId
+        EC2InstanceProfileId: !GetAtt IamStack.Outputs.EC2InstanceProfileId   
+        InternalAlbDNS: !GetAtt InternalAlbStack.Outputs.InternalAlbDNS    
+  
+  InternalTGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - InternalAlbStack
+      - VpcStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/load-balancers/internal-target-groups.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        InternalAlbId: !GetAtt InternalAlbStack.Outputs.InternalAlbId
+
+  AppASGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - VpcStack
+      - SecurityGroupsStack
+      - InternalTGStack
+      - AppLTStack
+      - RDSStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/auto-scaling/app-tier-asg.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        AppLaunchTemplateId: !GetAtt AppLTStack.Outputs.AppTierLaunchTemplateId
+        PrivateSubnet1Id: !GetAtt VpcStack.Outputs.PrivateSubnet1Id
+        PrivateSubnet2Id: !GetAtt VpcStack.Outputs.PrivateSubnet2Id
+        InternalTargetGroupId: !GetAtt InternalTGStack.Outputs.InternalTargetGroupId
+        AppTierLaunchTemplateVersion: !GetAtt AppLTStack.Outputs.AppTierLaunchTemplateVersion
+
+  ExternalAlbStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VpcStack
+      - SecurityGroupsStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/load-balancers/external-alb.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        PublicSubnet1Id: !GetAtt VpcStack.Outputs.PublicSubnet1Id
+        PublicSubnet2Id: !GetAtt VpcStack.Outputs.PublicSubnet2Id
+        Ec2ExternalAlbSgId: !GetAtt SecurityGroupsStack.Outputs.Ec2ExternalAlbSgId
+
+  ExternalTGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - ExternalAlbStack
+      - VpcStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/load-balancers/external-target-groups.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        ExternalAlbId: !GetAtt ExternalAlbStack.Outputs.ExternalAlbId
+
+  WebASGStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: 
+      - VpcStack
+      - SecurityGroupsStack
+      - ExternalTGStack
+      - WebLTStack
+    Properties:
+      TemplateURL: https://multi-tier-web-app-tjt.s3.eu-west-2.amazonaws.com/auto-scaling/web-tier-instance-asg.yaml
+      Parameters:
+        StackName: !Ref "AWS::StackName"
+        WebLaunchTemplateId: !GetAtt WebLTStack.Outputs.WebTierLaunchTemplateId
+        PublicSubnet1Id: !GetAtt VpcStack.Outputs.PublicSubnet1Id
+        PublicSubnet2Id: !GetAtt VpcStack.Outputs.PublicSubnet2Id
+        ExternalTargetGroupId: !GetAtt ExternalTGStack.Outputs.ExternalTargetGroupId
+        WebTierLaunchTemplateVersion: !GetAtt WebLTStack.Outputs.WebTierLaunchTemplateVersion  

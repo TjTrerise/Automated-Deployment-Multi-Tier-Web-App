@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: External Target Group for Web Tier
+
+Parameters:
+  
+  VpcId:
+    Type: String
+    Description: The ID for the VPC
+  
+  ExternalAlbId:
+    Type: String
+    Description: The ID for the external loadbalancer 
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+  
+  ExternalAlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${StackName}-external-tg"
+      TargetType: instance
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200-399
+  
+  
+  MyListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ExternalAlbId
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ExternalAlbTargetGroup
+
+Outputs:
+  ExternalTargetGroupId:
+    Value: !Ref ExternalAlbTargetGroup
+    Export:
+      Name: !Sub "${StackName}-TGId"

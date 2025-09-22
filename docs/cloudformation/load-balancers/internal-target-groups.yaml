@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Internal Target Group for App Tier
+
+Parameters:
+
+  VpcId:
+    Type: String
+    Description: The VPC ID for the main vpc
+  
+  InternalAlbId:
+    Type: String
+    Description: The internal ALB ID 
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+  
+
+Resources:
+  InternalAlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${StackName}-Internal-tg"
+      TargetType: instance
+      Port: 8080
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200-399
+
+
+  InternalListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn: InternalAlbTargetGroup
+    Properties:
+      LoadBalancerArn: !Ref InternalAlbId
+      Port: 8080
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref InternalAlbTargetGroup
+
+Outputs:
+  InternalTargetGroupId:
+    Value: !Ref InternalAlbTargetGroup
+    Export:
+      Name: !Sub "${StackName}-InternalTGId"

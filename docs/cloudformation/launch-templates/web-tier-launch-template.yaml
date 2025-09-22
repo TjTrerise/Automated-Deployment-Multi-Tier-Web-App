@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Web Tier EC2 Launch Template
+
+Parameters:
+
+  Ec2WebSgId:
+    Type: String
+    Description: The web security group
+
+  InternalAlbDNS:
+    Type: String
+    Description: The DNS for the internal ALB
+
+  EC2InstanceProfileId:
+    Type: String
+    Description: The instance profile ID
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+  WebTierLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${StackName}-WebTier"
+      LaunchTemplateData:
+        ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+        InstanceType: t2.micro
+        SecurityGroupIds:
+          - !Ref Ec2WebSgId
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfileId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -xe
+            yum install httpd mod_ssl -y
+            yum install mod_proxy_html -y
+          
+            systemctl start httpd
+            systemctl enable httpd
+
+            cat <<'EOF' > /etc/httpd/conf.d/my-app.conf
+            <VirtualHost *:80>
+              ServerAdmin webmaster@localhost
+              DocumentRoot /var/www/html
+              ErrorLog /var/log/httpd/error_log
+              CustomLog /var/log/httpd/access_log combined
+
+              ProxyPreserveHost On
+              ProxyRequests Off
+
+              ProxyPass / http://${InternalAlbDNS}:8080/
+              ProxyPassReverse / http://${InternalAlbDNS}:8080/
+            </VirtualHost>
+            EOF
+
+            systemctl restart httpd
+
+Outputs: 
+
+  WebTierLaunchTemplateId:
+    Description: The launch template for the web tier
+    Value: !Ref WebTierLaunchTemplate
+    Export:
+      Name: !Sub "${StackName}-lt-webtierId"
+
+  WebTierLaunchTemplateVersion:
+    Description: The version of the web tier launch template
+    Value: !GetAtt WebTierLaunchTemplate.LatestVersionNumber
+    Export:
+      Name: !Sub "${StackName}-lt-webtier-version"

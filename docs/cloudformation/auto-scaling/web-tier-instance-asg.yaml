@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Web Tier Auto Scaling Group
+
+Parameters:
+
+  WebLaunchTemplateId:
+    Type: String
+    Description: The launch template for the web instances
+
+  PublicSubnet1Id:
+    Type: String
+    Description: The ID for the first public subnet
+
+  PublicSubnet2Id:
+    Type: String
+    Description: The ID for the second public subnet
+
+  ExternalTargetGroupId:
+    Type: String
+    Description: The ID for the external targetgroup
+
+  WebTierLaunchTemplateVersion:
+    Type: String
+    Description: The template version for the web template.
+
+  StackName:
+    Type: String
+    Description: Name of the stack
+
+Resources:
+  
+  WebTierASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebLaunchTemplateId
+        Version: !Ref WebTierLaunchTemplateVersion
+      MinSize: 2
+      MaxSize: 3
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1Id
+        - !Ref PublicSubnet2Id
+      TargetGroupARNs:
+        - !Ref ExternalTargetGroupId
+      Tags:
+      - Key: Name
+        Value: !Sub "${StackName}-web-instance"
+        PropagateAtLaunch: true

@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multi-Tier Web App VPC stack
+
+Parameters:
+
+  VpcCidr:
+    Type: String
+    Description: Mapping for the VPC Cidr range
+
+  PublicSubnet1:
+    Type: String
+    Description: Mapping for the public Subnet 1 
+  
+  PublicSubnet2:
+    Type: String
+    Description: Mapping for the public subnet 2
+    
+  PrivateSubnet1:
+    Type: String
+    Description: Mapping for the app private subnet 1
+  
+  PrivateSubnet2:
+    Type: String
+    Description: Mapping for the private subnet 2
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: Vpc
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-igw"
+  
+  AttachInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    DependsOn: InternetGateway
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+    
+  PublicSub1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet1
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-public-sub1"
+  
+  PublicSub2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet2
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-public-sub2"
+  
+  PrivateSub1:
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref Vpc
+        AvailabilityZone: !Select [0, !GetAZs ""]
+        CidrBlock: !Ref PrivateSubnet1
+        MapPublicIpOnLaunch: false
+        Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-private-sub1"
+
+  PrivateSub2:
+    Type: AWS::EC2::Subnet
+    Properties:
+        VpcId: !Ref Vpc
+        AvailabilityZone: !Select [1, !GetAZs ""]
+        CidrBlock: !Ref PrivateSubnet2
+        MapPublicIpOnLaunch: false
+        Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-private-sub2"
+
+  NatGatewayElasticIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-nat-eip-1" 
+  
+  NatGatewayElasticIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-nat-eip-2" 
+  
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    DependsOn: PublicSub1
+    Properties:
+      AllocationId: !GetAtt NatGatewayElasticIP1.AllocationId
+      SubnetId: !Ref PublicSub1
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-natgateway-1"
+  
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    DependsOn: PublicSub2
+    Properties:
+      AllocationId: !GetAtt NatGatewayElasticIP2.AllocationId
+      SubnetId: !Ref PublicSub2
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-natgateway-2"
+  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-pubic-rt-1"
+  
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-private-rt-1"
+  
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-private-rt-2"
+
+  PublicRtAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSub1
+      RouteTableId: !Ref PublicRouteTable
+  
+  PublicRtAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicRtAssociation1
+    Properties:
+      SubnetId: !Ref PublicSub2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRt1Associations:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSub1
+      RouteTableId: !Ref PrivateRouteTable1
+  
+  PrivateRt2Associations:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSub2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  PublicRouteExternal:
+    Type: AWS::EC2::Route
+    DependsOn: AttachInternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  Private1RouteExternal:
+    Type: AWS::EC2::Route
+    DependsOn: AttachInternetGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  Private2RouteExternal:
+    Type: AWS::EC2::Route
+    DependsOn: AttachInternetGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+  
+Outputs:
+
+  VpcId:
+    Description: The VPC for the multi-tiered web application
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "${StackName}-VpcId"
+
+  PublicSubnet1Id:
+    Description: The first public subnet for the multi-tiered web application
+    Value: !Ref PublicSub1
+    Export:
+      Name: !Sub "${StackName}-Public-SubId"
+  
+  PublicSubnet2Id:
+    Description: The second public subnet for the multi-tier web application
+    Value: !Ref PublicSub2
+    Export:
+      Name: !Sub "${StackName}-Public-Sub2Id"
+
+  PrivateSubnet1Id:
+    Description: The private subnet for the multi-tiered web application
+    Value: !Ref PrivateSub1
+    Export:
+      Name: !Sub "${StackName}-Private-Sub1Id"
+  
+  PrivateSubnet2Id:
+    Description: The private subnet for the multi-tiered web application
+    Value: !Ref PrivateSub2
+    Export:
+      Name: !Sub "${StackName}-Private-Sub2Id"
+  
+  PublicRouteTableId:
+    Description: The public route table for the multi-tiered web application
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: !Sub "${StackName}-Pubic-RTId"
+  
+  PrivateRouteTable1Id:
+    Description: The private route table for the multi-tier web application
+    Value: !Ref PrivateRouteTable1
+    Export:
+      Name: !Sub "${StackName}-Private-RT1Id"
+
+  PrivateRouteTable2Id:
+    Description: The private route table for the multi-tier web application
+    Value: !Ref PrivateRouteTable2
+    Export:
+      Name: !Sub "${StackName}-Private-RT2Id"
+  
+  
+
+
+          

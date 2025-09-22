@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Multi-Tier Web App CloudFormation Service Role
+
+Resources:
+  CloudFormationServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "mtwa-CloudFormationServiceRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: CloudFormationStackManagementPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - s3:*
+                  - secretsmanager:*
+                  - ssm:*
+                  - iam:*
+                  - ec2:*
+                  - rds:*
+                  - elasticloadbalancing:*
+                  - autoscaling:*
+                Resource: '*'
+
+Outputs:
+  CloudFormationServiceRoleArn:
+    Description: The CloudFormation Service Role for the mtwa
+    Value: !GetAtt CloudFormationServiceRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}"

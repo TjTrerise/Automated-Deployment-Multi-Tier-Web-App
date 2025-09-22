@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: External Internet-facing ALB
+
+Parameters:
+
+  VpcId:
+    Type: String
+    Description: The ID for the VPC
+
+  PublicSubnet1Id:
+    Type: String
+    Description: The ID for the first public subnet
+
+  PublicSubnet2Id:
+    Type: String
+    Description: The Id for the second public subnet
+
+  Ec2ExternalAlbSgId:
+    Type: String
+    Description: The security group for the external alb
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+  ExternalApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${StackName}-External-alb"
+      Type: application
+      Scheme: internet-facing
+      Subnets:
+        - !Ref PublicSubnet1Id
+        - !Ref PublicSubnet2Id
+      SecurityGroups:
+        - !Ref Ec2ExternalAlbSgId
+      Tags:
+        - Key: Name
+          Value: !Sub "${StackName}-External-alb"
+
+Outputs:
+  
+  ExternalAlbId:
+    Value: !Ref ExternalApplicationLoadBalancer
+    Export:
+      Name: !Sub "${StackName}-External-AlbId"
+

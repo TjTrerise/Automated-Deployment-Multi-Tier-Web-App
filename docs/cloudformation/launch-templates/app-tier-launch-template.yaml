@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: App Tier EC2 Launch Template
+
+Parameters:
+
+  Ec2AppSgId:
+    Type: String
+    Description: The security group for the app tier instance
+
+  DBSecretId:
+    Type: String
+    Description: The name of the Secrets Manager secret for the database user.
+  
+  DatabaseEndpointId:
+    Type: String
+    Description: The hostname for the database
+
+  EC2InstanceProfileId:
+    Type: String 
+    Description: The instance profile ID
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+  AppTierLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${StackName}-AppTier"
+      LaunchTemplateData:
+        ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+        InstanceType: t2.micro
+        SecurityGroupIds:
+          - !Ref Ec2AppSgId
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfileId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -xe
+            rpm -Uvh https://dev.mysql.com/get/mysql80-community-release-el7-3.noarch.rpm
+            rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023
+            yum install -y mysql-community-client jq mysql git python3-pip
+            python3 -m pip install --upgrade pip
+            pip3 install Flask PyMySQL gunicorn cryptography
+
+
+            mkdir -p /home/ec2-user/app
+
+            SECRET_JSON=$(aws secretsmanager get-secret-value \
+              --secret-id ${DBSecretId} \
+              --query SecretString \
+              --output text \
+              --region ${AWS::Region})
+
+            DB_USER=$(echo $SECRET_JSON | jq -r .username)
+            DB_PASSWORD=$(echo $SECRET_JSON | jq -r .password)
+
+            DB_NAME=$(aws ssm get-parameter \
+              --name /mtwa/db/name \
+              --with-decryption \
+              --query Parameter.Value \
+              --output text \
+              --region ${AWS::Region})
+
+            cat <<'EOF' > /home/ec2-user/app/app.py
+            from flask import Flask
+            import pymysql, os
+
+            app = Flask(__name__)
+            DB_HOST = os.environ['DB_HOST']
+            DB_USER = os.environ['DB_USER']
+            DB_PASSWORD = os.environ['DB_PASSWORD']
+            DB_NAME = os.environ['DB_NAME']
+
+            @app.route('/')
+            def hello_world():
+                try:
+                    conn = pymysql.connect(
+                        host=DB_HOST,
+                        user=DB_USER,
+                        password=DB_PASSWORD,
+                        database=DB_NAME,
+                        connect_timeout=5
+                    )
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT VERSION()")
+                    db_version = cursor.fetchone()[0]
+                    cursor.close()
+                    conn.close()
+                    return f"<h1>App Tier - Connected to MySQL: {db_version}</h1>"
+                except Exception as e:
+                    return f"<h1>Database connection failed: {e}</h1>", 500
+
+            if __name__ == '__main__':
+                app.run(host='0.0.0.0', port=8080)
+            EOF
+            
+            cat <<EOF > /etc/systemd/system/flaskapp.service
+            [Unit]
+            Description=Gunicorn instance to serve my Flask app
+            After=network.target
+
+            [Service]
+            User=ec2-user
+            Group=ec2-user
+            WorkingDirectory=/home/ec2-user/app
+            ExecStart=/usr/local/bin/gunicorn --workers 4 --bind 0.0.0.0:8080 app:app
+            Restart=always
+
+            Environment="DB_HOST=${DatabaseEndpointId}"
+            Environment="DB_USER=$DB_USER"
+            Environment="DB_PASSWORD=$DB_PASSWORD"
+            Environment="DB_NAME=$DB_NAME"
+            
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            systemctl daemon-reload
+            systemctl start flaskapp
+            systemctl enable flaskapp
+
+
+Outputs: 
+
+  AppTierLaunchTemplateId:
+    Description: The launch template for the app tier
+    Value: !Ref AppTierLaunchTemplate
+    Export:
+      Name: !Sub "${StackName}-lt-apptierId"
+  
+  AppTierLaunchTemplateVersion:
+    Description: The version of the web tier launch template
+    Value: !GetAtt AppTierLaunchTemplate.LatestVersionNumber
+    Export:
+      Name: !Sub "${StackName}-lt-apptier-version"

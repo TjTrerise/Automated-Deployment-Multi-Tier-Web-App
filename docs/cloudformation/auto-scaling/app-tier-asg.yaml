@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: App Tier Auto Scaling Group
+
+Parameters:
+  AppLaunchTemplateId:
+    Type: String
+    Description: The launch template ID for the app tier instances
+
+  PrivateSubnet1Id:
+    Type: String
+    Description: The Id for the first private subnet
+
+  PrivateSubnet2Id:
+    Type: String
+    Description: The ID for the second private subnet
+
+  InternalTargetGroupId:
+    Type: String
+    Description: The internal target group ID
+
+  AppTierLaunchTemplateVersion:
+    Type: String
+    Description: The launch template version for the app tier.
+
+  StackName:
+    Type: String
+    Description: Name of the  stack
+
+Resources:
+  
+  AppTierASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplateId
+        Version: !Ref AppTierLaunchTemplateVersion
+      MinSize: 2
+      MaxSize: 3
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      TargetGroupARNs:
+        - !Ref  InternalTargetGroupId
+      Tags:
+      - Key: Name
+        Value: !Sub "${StackName}-app-instance"
+        PropagateAtLaunch: true
+

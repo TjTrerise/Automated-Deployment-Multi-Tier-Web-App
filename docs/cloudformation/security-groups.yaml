@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creating the security group for the multi-tier web app
+
+Parameters:
+
+  VpcId:
+    Type: String
+    Description: The VPC ID
+  
+  StackName:
+    Type: String
+    Description: Name of the stack
+
+Resources:
+
+  Ec2ExternalAlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group that controls albs
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "{StackName}-external-alb-sg"
+  
+  Ec2WebSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group that controls web instances
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref Ec2ExternalAlbSg
+      Tags:
+        - Key: Name
+          Value: !Sub "{StackName}-web-sg"
+    
+  Ec2InternalAlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group that controls web instances
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref Ec2WebSg
+      Tags:
+        - Key: Name
+          Value: !Sub "{StackName}-internal-alb-sg"
+          
+  Ec2AppSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group that controls app instances
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref Ec2InternalAlbSg
+      Tags:
+        - Key: Name
+          Value: !Sub "{StackName}-app-sg"
+  
+  RdsSg:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: Ec2AppSg
+    Properties:
+      GroupDescription: Security group that controls the database traffic
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref Ec2AppSg
+      Tags:
+        - Key: Name
+          Value: !Sub "{StackName}-rds-sg"
+
+
+Outputs: 
+  Ec2ExternalAlbSgId:
+    Description: The security group for the multi-tier app alb
+    Value: !Ref Ec2ExternalAlbSg
+    Export:
+      Name: !Sub "${StackName}ExtAlbSgId"
+
+  Ec2WebSgId:
+    Description: The security group for the multi-tier app web instances
+    Value: !Ref Ec2WebSg
+    Export:
+      Name: !Sub "${StackName}Ec2WebSgId"
+  
+  Ec2InternalAlbSgId:
+    Description: The security group for the multi-tier app alb
+    Value: !Ref Ec2InternalAlbSg
+    Export:
+      Name: !Sub "${StackName}IntAlbSgId"
+
+  Ec2AppSgId:
+    Description: The security group for the multi-tier app instances
+    Value: !Ref Ec2AppSg
+    Export:
+      Name: !Sub "${StackName}Ec2AppSgId"
+  
+  RdsSgId:
+    Description: The security group for the multi-tier app rds 
+    Value: !Ref RdsSg
+    Export:
+      Name: !Sub "${StackName}RdsSgId"
+   
+
+      
