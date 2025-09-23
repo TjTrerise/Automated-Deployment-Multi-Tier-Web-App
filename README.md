@@ -5,7 +5,7 @@
 
 This project involves designing an automated multi-tiered application that utilises three different tiers to provide high availability. All services are provisioned using IaC, autoscaling groups and launch templates to create and deploy EC2 instances that are split over multiple availbility zones. The public and private tiers are supported by a load balancer (One external, one internal) to manage traffic between and verify system health. The MySQL database is launched on RDS in multi-AZ mode to ensure failover and the entire project is made secure by utilising security groups to prevent traffic into the VPC that is not on the specified ports.
 
-
+![Architectural Diagram](/docs/architectural-diagram.png)
 
 ## Features
 
@@ -326,12 +326,30 @@ This project has further improved my ability and consistency utilising CloudForm
 ## Visuals Of The Project
 
 ![App Tier User Data Logs](/docs/visual-guides/21-app-tier-log.png)
+
+
 ![Web Tier User Data Logs](/docs/visual-guides/21-web-tier-log.png)
+
+
 ![CloudFormation Events](/docs/visual-guides/20-successful-launch.png)
+
+
 ![Healthy External Targets](/docs/visual-guides/21-healthy-targets-external.png)
+
+
 ![Healthy Internal Targets](/docs/visual-guides/21-healthy-targets-internal.png)
+
+
 ![Flaskapp Running](/docs/visual-guides/21-flaskapp-status.png)
+
+
 ![HTTPD Service Running](/docs/visual-guides/21-httpd-status.png)
+
+
 ![The Database Instance](/docs/visual-guides/database.png)
+
+
 ![Launched Load Balancers](/docs/visual-guides/loadbalancers.png)
+
+
 ![Launched Instances](/docs/visual-guides/launched-instances.png)
